@@ -13,7 +13,11 @@ func main() {
 	os.Exit(_main())
 }
 func _main() int {
+	cfg := engine.NewConfig()
+	parseFlags(&cfg)
+
 	fmt.Println("Factoid Transaction Tracker Daemon")
+	fmt.Println(cfg)
 	fmt.Println("Starting...")
 
 	// Listen for an Interrupt and cancel everything if it occurs.
@@ -25,7 +29,7 @@ func _main() int {
 		cancel()
 	}()
 
-	engineDone, err := engine.Start(ctx, ":memory:")
+	engineDone, err := cfg.Start(ctx)
 	if err != nil {
 		fmt.Println("Error: ", err)
 		return 1

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"crawshaw.io/sqlite"
+	"crawshaw.io/sqlite/sqlitex"
 	"github.com/Factom-Asset-Tokens/factom"
 )
 
@@ -30,12 +31,12 @@ func InsertFBlock(conn *sqlite.Conn, fb factom.FBlock, price float64,
 	stmt.BindInt64(1, int64(fb.Height))
 	stmt.BindBytes(2, fb.KeyMR[:])
 	stmt.BindInt64(3, fb.Timestamp.Unix())
-	stmt.BindFloat(4, price)
 	data, err := fb.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("factom.FBlock.MarshalBinary(): %w", err)
 	}
 	stmt.BindBytes(4, data)
+	stmt.BindFloat(5, price)
 
 	_, err = stmt.Step()
 	offset := factom.FBlockHeaderMinSize + len(fb.Expansion)
@@ -93,4 +94,15 @@ func selectFBlock(stmt *sqlite.Stmt) (factom.FBlock, error) {
 	}
 
 	return fb, nil
+}
+
+func SelectSyncHeight(conn *sqlite.Conn) (uint32, error) {
+	var height uint32
+	err := sqlitex.Exec(conn, `SELECT "height" FROM "fblock"
+                ORDER BY "height" DESC LIMIT 1;`,
+		func(stmt *sqlite.Stmt) error {
+			height = uint32(stmt.ColumnInt64(0))
+			return nil
+		})
+	return height, err
 }
