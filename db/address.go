@@ -35,13 +35,13 @@ func InsertAddresses(conn *sqlite.Conn, tx factom.Transaction,
 
 	// If the tx does not contain an address in the whitelist, then we
 	// rollback all changes.
-	defer func(errP *error) {
-		if *errP == ignoreErr {
+	defer func() {
+		if err == ignoreErr {
 			// Clear this err as it was only here to rollback the
 			// changes.
-			*errP = nil
+			err = nil
 		}
-	}(&err)
+	}()
 	defer sqlitex.Save(conn)(&err)
 
 	insertAdrTx := conn.Prep(`INSERT INTO "address_transaction"
