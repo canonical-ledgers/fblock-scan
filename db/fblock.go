@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"time"
 
 	"crawshaw.io/sqlite"
 	"github.com/Factom-Asset-Tokens/factom"
@@ -16,7 +17,9 @@ const CreateTableFBlock = `CREATE TABLE "fblock"(
 );
 `
 
-func InsertFBlock(conn *sqlite.Conn, fb factom.FBlock, price float64) error {
+func InsertFBlock(conn *sqlite.Conn, fb factom.FBlock, price float64,
+	whitelist map[factom.FAAddress]struct{}) error {
+
 	stmt := conn.Prep(`INSERT INTO "fblock" (
                 "height",
                 "key_mr",
@@ -35,6 +38,27 @@ func InsertFBlock(conn *sqlite.Conn, fb factom.FBlock, price float64) error {
 	stmt.BindBytes(4, data)
 
 	_, err = stmt.Step()
+	offset := factom.FBlockHeaderMinSize + len(fb.Expansion)
+	lastTs := fb.Timestamp
+
+	for _, tx := range fb.Transactions {
+		// Advance the offset past any minute markers.
+		offset += int(tx.Timestamp.Sub(lastTs) / time.Minute)
+
+		txID, err := InsertTransaction(conn, tx, fb.Height, offset)
+		if err != nil {
+			return err
+		}
+
+		if err := InsertAddresses(conn, tx, txID, whitelist); err != nil {
+			return err
+		}
+
+		// Advance the offset to the next tx.
+		offset += tx.MarshalBinaryLen()
+		lastTs = tx.Timestamp
+	}
+
 	return err
 }
 

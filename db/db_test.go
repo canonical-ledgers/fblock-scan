@@ -2,7 +2,6 @@ package db
 
 import (
 	"testing"
-	"time"
 
 	"crawshaw.io/sqlite"
 	"github.com/Factom-Asset-Tokens/factom"
@@ -18,24 +17,16 @@ func TestDB(t *testing.T) {
 	require.NoError(Setup(conn), "Setup()")
 
 	var fb factom.FBlock
-	require.NoError(fb.UnmarshalBinary(fblockData))
+	require.NoError(fb.UnmarshalBinary(fblockData),
+		"factom.FBlock.UnmarshalBinary()")
 
-	require.NoError(InsertFBlock(conn, fb, 4.51))
-
-	offset := factom.FBlockHeaderMinSize + len(fb.Expansion)
-	lastTs := fb.Timestamp
-	for _, tx := range fb.Transactions {
-		offset += int(tx.Timestamp.Sub(lastTs) / time.Minute)
-		_, err := InsertTransaction(conn, tx, fb.Height, offset)
-		require.NoError(err, "InsertTransaction")
-		offset += tx.MarshalBinaryLen()
-		lastTs = tx.Timestamp
-	}
+	require.NoError(InsertFBlock(conn, fb, 4.51, nil), "InsertFBlock()")
+	require.Error(InsertFBlock(conn, fb, 4.51, nil), "InsertFBlock(), duplicate")
 
 	for _, tx := range fb.Transactions {
 		txID := tx.ID
 		tx, err := SelectTransactionByTxID(conn, txID)
-		require.NoError(err, "SelectTransactionByTxID")
+		require.NoError(err, "SelectTransactionByTxID()")
 		require.Equal(txID, tx.ID)
 	}
 }

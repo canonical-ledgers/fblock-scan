@@ -30,6 +30,61 @@ func AddressAdd(conn *sqlite.Conn, adr *factom.FAAddress, add int64) (int64, err
 	return SelectAddressID(conn, adr)
 }
 
+func InsertAddresses(conn *sqlite.Conn, tx factom.Transaction,
+	txID int64, whitelist map[factom.FAAddress]struct{}) (err error) {
+
+	// If the tx does not contain an address in the whitelist, then we
+	// rollback all changes.
+	defer func(errP *error) {
+		if *errP == ignoreErr {
+			// Clear this err as it was only here to rollback the
+			// changes.
+			*errP = nil
+		}
+	}(&err)
+	defer sqlitex.Save(conn)(&err)
+
+	insertAdrTx := conn.Prep(`INSERT INTO "address_transaction"
+                ("tx_id", "adr_id", "amount") VALUES
+                (?, ?, ?)
+                ON CONFLICT("tx_id", "adr_id") DO
+                UPDATE SET "amount" = "amount" + "excluded"."amount";`)
+	insertAdrTx.BindInt64(1, txID)
+
+	var save bool
+	if whitelist == nil { // Save all Addresses
+		save = true
+	}
+
+	sign := int64(-1)
+	for _, adrs := range [][]factom.AddressAmount{tx.FCTInputs, tx.FCTOutputs} {
+		for _, adr := range adrs {
+			amount := sign * int64(adr.Amount)
+			adr := adr.FAAddress()
+			if !save {
+				_, save = whitelist[adr]
+			}
+			var adrID int64
+			if adrID, err = AddressAdd(conn, &adr, amount); err != nil {
+				return err
+			}
+			insertAdrTx.BindInt64(2, adrID)
+			insertAdrTx.BindInt64(3, amount)
+			if _, err = insertAdrTx.Step(); err != nil {
+				return err
+			}
+			insertAdrTx.Reset()
+		}
+		sign = 1
+	}
+
+	if !save {
+		// Rollback all changes.
+		return ignoreErr
+	}
+	return nil
+}
+
 const sqlitexNoResultsErr = "sqlite: statement has no results"
 
 // SelectIDBalance returns the rowid and balance for the given adr.

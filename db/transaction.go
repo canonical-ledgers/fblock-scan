@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"crawshaw.io/sqlite"
-	"crawshaw.io/sqlite/sqlitex"
 	"github.com/Factom-Asset-Tokens/factom"
 )
 
@@ -43,8 +42,8 @@ const CreateTableAddressTransaction = `CREATE TABLE "address_transaction" (
 );`
 
 func InsertTransaction(conn *sqlite.Conn, tx factom.Transaction,
-	height uint32, fbOffset int) (txID int64, err error) {
-	defer sqlitex.Save(conn)(&err)
+	height uint32, fbOffset int) (int64, error) {
+
 	insertTx := conn.Prep(`INSERT INTO "transaction"
                 ("height",
                 "fb_offset", "size",
@@ -61,40 +60,15 @@ func InsertTransaction(conn *sqlite.Conn, tx factom.Transaction,
 	insertTx.BindInt64(7, int64(tx.TotalFCTOut))
 	insertTx.BindInt64(8, int64(tx.TotalECOut))
 
-	_, err = insertTx.Step()
+	_, err := insertTx.Step()
 	if err != nil {
 		return -1, err
 	}
-	txID = conn.LastInsertRowID()
 
-	insertAdrTx := conn.Prep(`INSERT INTO "address_transaction"
-                ("tx_id", "adr_id", "amount") VALUES
-                (?, ?, ?)
-                ON CONFLICT("tx_id", "adr_id") DO
-                UPDATE SET "amount" = "amount" + "excluded"."amount";`)
-	insertAdrTx.BindInt64(1, txID)
-
-	sign := int64(-1)
-	for _, adrs := range [][]factom.AddressAmount{tx.FCTInputs, tx.FCTOutputs} {
-		for _, adr := range adrs {
-			amount := sign * int64(adr.Amount)
-			adr := adr.FAAddress()
-			var adrID int64
-			if adrID, err = AddressAdd(conn, &adr, amount); err != nil {
-				return -1, err
-			}
-			insertAdrTx.BindInt64(2, adrID)
-			insertAdrTx.BindInt64(3, amount)
-			if _, err = insertAdrTx.Step(); err != nil {
-				return -1, err
-			}
-			insertAdrTx.Reset()
-		}
-		sign = 1
-	}
-
-	return txID, nil
+	return conn.LastInsertRowID(), nil
 }
+
+var ignoreErr = fmt.Errorf("ignore")
 
 var selectTransactionWhere = `SELECT "fblock"."rowid", "fb_offset", "size"
         FROM "transaction" JOIN "fblock" ON "transaction"."height" = "fblock"."height" WHERE `
