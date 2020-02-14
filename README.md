@@ -34,7 +34,7 @@ Usage of ./fblock-scan:
   -api-key string
     	CryptoCompare API Key
   -db string
-    	SQLite Database URI (default "/home/aslevy/fblock-scan.sqlite3")
+    	SQLite Database URI (default "$HOME/fblock-scan.sqlite3")
   -s string
     	Factomd URL (default "http://localhost:8088/v2")
   -start-scan int
