@@ -7,18 +7,20 @@ import (
 	"crawshaw.io/sqlite/sqlitex"
 )
 
-const (
-	// For the sake of simplicity, all chain DBs use the exact same schema,
-	// regardless of whether they actually make use of the NFTokens tables.
-	dbSchema = CreateTableFBlock +
-		CreateTableAddress +
-		CreateTableTransaction +
-		CreateTableAddressTransaction
+// For the sake of simplicity, all chain DBs use the exact same schema,
+// regardless of whether they actually make use of the NFTokens tables.
+const dbSchema = CreateTableFBlock +
+	CreateTableAddress +
+	CreateTableTransaction +
+	CreateTableAddressTransaction
 
-	currentDBVersion = 1
-)
+var currentDBVersion = len(migrations) + 1
 
-var migrations = []func(*sqlite.Conn) error{}
+var migrations = []func(*sqlite.Conn) error{
+	func(conn *sqlite.Conn) error {
+		return nil
+	},
+}
 
 func applyMigrations(conn *sqlite.Conn) (err error) {
 	empty, err := isEmpty(conn)

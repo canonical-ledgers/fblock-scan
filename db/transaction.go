@@ -13,9 +13,8 @@ const CreateTableTransaction = `CREATE TABLE "transaction" (
         "height" INT NOT NULL,    -- "fblock"."height"
 
         "fb_offset" INT NOT NULL, -- index of tx data within "fblock"."data"
-        "size" INT NOT NULL, -- length of tx data in bytes
+        "size" INT NOT NULL,      -- length of tx data in bytes
 
-        "id" BLOB PRIMARY KEY NOT NULL, -- hash of tx ledger data
         "timestamp" INT NOT NULL,
 
         -- amounts
@@ -23,10 +22,13 @@ const CreateTableTransaction = `CREATE TABLE "transaction" (
         "total_fct_out" INT NOT NULL, -- denoted in factoshis
         "total_ec_out"  INT NOT NULL, -- denoted in factoshis
 
+        "hash" BLOB NOT NULL, -- hash of tx ledger data
+
         "memo" TEXT,
 
         FOREIGN KEY("height") REFERENCES "fblock"("height")
 );
+CREATE INDEX "idx_transaction_id" ON "transaction"("id");
 `
 
 const CreateTableAddressTransaction = `CREATE TABLE "address_transaction" (
@@ -44,23 +46,29 @@ const CreateTableAddressTransaction = `CREATE TABLE "address_transaction" (
 func InsertTransaction(conn *sqlite.Conn, tx factom.Transaction,
 	height uint32, fbOffset int) (int64, error) {
 
-	insertTx := conn.Prep(`INSERT INTO "transaction"
-                ("height",
-                "fb_offset", "size",
-                "id", "timestamp",
-                "total_fct_in", "total_fct_out", "total_ec_out"
-                ) VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?);`)
-	insertTx.BindInt64(1, int64(height))
-	insertTx.BindInt64(2, int64(fbOffset))
-	insertTx.BindInt64(3, int64(tx.MarshalBinaryLen()))
-	insertTx.BindBytes(4, tx.ID[:])
-	insertTx.BindInt64(5, tx.Timestamp.Unix())
-	insertTx.BindInt64(6, int64(tx.TotalIn))
-	insertTx.BindInt64(7, int64(tx.TotalFCTOut))
-	insertTx.BindInt64(8, int64(tx.TotalECOut))
+	stmt := conn.Prep(`INSERT INTO "transaction" (
+                "height",
+                "fb_offset",
+                "size",
+                "id",
+                "timestamp",
+                "total_fct_in",
+                "total_fct_out",
+                "total_ec_out"
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`)
+	defer stmt.Reset()
 
-	_, err := insertTx.Step()
+	i := sqlite.BindIncrementor()
+	stmt.BindInt64(i(), int64(height))
+	stmt.BindInt64(i(), int64(fbOffset))
+	stmt.BindInt64(i(), int64(tx.MarshalBinaryLen()))
+	stmt.BindBytes(i(), tx.ID[:])
+	stmt.BindInt64(i(), tx.Timestamp.Unix())
+	stmt.BindInt64(i(), int64(tx.TotalIn))
+	stmt.BindInt64(i(), int64(tx.TotalFCTOut))
+	stmt.BindInt64(i(), int64(tx.TotalECOut))
+
+	_, err := stmt.Step()
 	if err != nil {
 		return -1, err
 	}
@@ -71,20 +79,23 @@ func InsertTransaction(conn *sqlite.Conn, tx factom.Transaction,
 var ignoreErr = fmt.Errorf("ignore")
 
 var selectTransactionWhere = `SELECT "fblock"."rowid", "fb_offset", "size"
-        FROM "transaction" JOIN "fblock" ON "transaction"."height" = "fblock"."height" WHERE `
+        FROM "transaction" JOIN "fblock" ON
+                "transaction"."height" = "fblock"."height" WHERE `
 
 func SelectTransactionByTxID(conn *sqlite.Conn,
 	txID *factom.Bytes32) (factom.Transaction, error) {
 
 	stmt := conn.Prep(selectTransactionWhere + `"id" = ?;`)
-	stmt.BindBytes(1, txID[:])
+	defer stmt.Reset()
+	stmt.BindBytes(sqlite.BindIndexStart, txID[:])
 	return selectTransaction(conn, stmt)
 }
 func SelectTransactionByRowID(conn *sqlite.Conn,
 	rowID int64) (factom.Transaction, error) {
 
 	stmt := conn.Prep(selectFBlockWhere + `"rowid" = ?;`)
-	stmt.BindInt64(1, rowID)
+	defer stmt.Reset()
+	stmt.BindInt64(sqlite.BindIndexStart, rowID)
 	return selectTransaction(conn, stmt)
 }
 func selectTransaction(conn *sqlite.Conn, stmt *sqlite.Stmt) (
@@ -99,11 +110,12 @@ func selectTransaction(conn *sqlite.Conn, stmt *sqlite.Stmt) (
 		return tx, fmt.Errorf("no Transaction found")
 	}
 
-	fbRowID := stmt.ColumnInt64(0)
-	fbOffset := stmt.ColumnInt64(1)
-	size := int(stmt.ColumnInt64(2))
+	i := sqlite.ColumnIncrementor()
+	fblockID := stmt.ColumnInt64(i())
+	fbOffset := stmt.ColumnInt64(i())
+	size := int(stmt.ColumnInt64(i()))
 
-	blob, err := conn.OpenBlob("", "fblock", "data", fbRowID, false)
+	blob, err := conn.OpenBlob("", "fblock", "data", fblockID, false)
 	if err != nil {
 		return tx, err
 	}
@@ -117,7 +129,6 @@ func selectTransaction(conn *sqlite.Conn, stmt *sqlite.Stmt) (
 		return tx, fmt.Errorf("unexpected end of Transaction data")
 	}
 
-	fmt.Println(data)
 	if err := tx.UnmarshalBinary(data); err != nil {
 		return tx, fmt.Errorf("factom.Transaction.UnmarshalBinary(): %w", err)
 	}

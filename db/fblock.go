@@ -11,37 +11,82 @@ import (
 
 const CreateTableFBlock = `CREATE TABLE "fblock"(
         "height" INT PRIMARY KEY,
+        "timestamp" INT NOT NULL,
+        "tx_count" INT NOT NULL,
+        "ec_exchange_rate" INT NOT NULL,
+        "price" REAL, -- Denoted in USD
         "key_mr" BLOB NOT NULL UNIQUE,
-        "timestamp" INT,
-        "data" BLOB,
-        "price" REAL -- Denoted in USD
+        "data" BLOB NOT NULL
 );
 `
 
 func InsertFBlock(conn *sqlite.Conn, fb factom.FBlock, price float64,
-	whitelist map[factom.FAAddress]struct{}) error {
+	whitelist map[factom.FAAddress]struct{}) (err error) {
 
-	stmt := conn.Prep(`INSERT INTO "fblock" (
-                "height",
-                "key_mr",
-                "timestamp",
-                "data",
-                "price") VALUES (?, ?, ?, ?, ?);`)
+	if err = checkFBlockContinuity(conn, fb); err != nil {
+		return err
+	}
 
-	stmt.BindInt64(1, int64(fb.Height))
-	stmt.BindBytes(2, fb.KeyMR[:])
-	stmt.BindInt64(3, fb.Timestamp.Unix())
 	data, err := fb.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("factom.FBlock.MarshalBinary(): %w", err)
 	}
-	stmt.BindBytes(4, data)
-	stmt.BindFloat(5, price)
+
+	defer sqlitex.Save(conn)(&err)
+
+	stmt := conn.Prep(`INSERT INTO "fblock" (
+                "height",
+                "timestamp",
+                "tx_count",
+                "ec_exchange_rate",
+                "price",
+                "key_mr",
+                "data"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?);`)
+	defer stmt.Reset()
+
+	i := sqlite.BindIncrementor()
+	stmt.BindInt64(i(), int64(fb.Height))
+	stmt.BindInt64(i(), fb.Timestamp.Unix())
+	stmt.BindInt64(i(), int64(len(fb.Transactions)))
+	stmt.BindInt64(i(), int64(fb.ECExchangeRate))
+	if price > 0 {
+		stmt.BindFloat(i(), price)
+	} else {
+		stmt.BindNull(i())
+	}
+	stmt.BindBytes(i(), fb.KeyMR[:])
+	stmt.BindBytes(i(), data)
 
 	_, err = stmt.Step()
+	if err != nil {
+		return err
+	}
+
+	return InsertAllTransactions(conn, fb, whitelist)
+}
+func checkFBlockContinuity(conn *sqlite.Conn, fb factom.FBlock) error {
+	if fb.PrevKeyMR.IsZero() {
+		// This is the first FBlock in the chain.
+		return nil
+	}
+	prevKeyMR, err := SelectFBlockKeyMR(conn, fb.Height-1)
+	if err != nil {
+		return fmt.Errorf("fblock.SelectFBlockKeyMR(height: %v): %w",
+			fb.Height-1, err)
+	}
+	if *fb.PrevKeyMR != prevKeyMR {
+		return fmt.Errorf("invalid FBlock.PrevKeyMR, expected:%v but got:%v",
+			prevKeyMR, fb.PrevKeyMR)
+	}
+	return nil
+}
+
+func InsertAllTransactions(conn *sqlite.Conn, fb factom.FBlock,
+	whitelist map[factom.FAAddress]struct{}) (err error) {
+	defer sqlitex.Save(conn)(&err)
 	offset := factom.FBlockHeaderMinSize + len(fb.Expansion)
 	lastTs := fb.Timestamp
-
 	for _, tx := range fb.Transactions {
 		// Advance the offset past any minute markers.
 		offset += int(tx.Timestamp.Sub(lastTs) / time.Minute)
@@ -59,20 +104,21 @@ func InsertFBlock(conn *sqlite.Conn, fb factom.FBlock, price float64,
 		offset += tx.MarshalBinaryLen()
 		lastTs = tx.Timestamp
 	}
-
-	return err
+	return nil
 }
 
 var selectFBlockWhere = `SELECT "data" FROM "fblock" WHERE `
 
 func SelectFBlockByKeyMR(conn *sqlite.Conn, keyMR *factom.Bytes32) (factom.FBlock, error) {
 	stmt := conn.Prep(selectFBlockWhere + `"key_mr" = ?;`)
-	stmt.BindBytes(1, keyMR[:])
+	defer stmt.Reset()
+	stmt.BindBytes(sqlite.BindIndexStart, keyMR[:])
 	return selectFBlock(stmt)
 }
 func SelectFBlockByHeight(conn *sqlite.Conn, height uint32) (factom.FBlock, error) {
 	stmt := conn.Prep(selectFBlockWhere + `"height" = ?;`)
-	stmt.BindInt64(1, int64(height))
+	defer stmt.Reset()
+	stmt.BindInt64(sqlite.BindIndexStart, int64(height))
 	return selectFBlock(stmt)
 }
 func selectFBlock(stmt *sqlite.Stmt) (factom.FBlock, error) {
@@ -86,8 +132,9 @@ func selectFBlock(stmt *sqlite.Stmt) (factom.FBlock, error) {
 		return fb, fmt.Errorf("no FBlock found")
 	}
 
-	data := make([]byte, stmt.ColumnLen(0))
-	stmt.ColumnBytes(0, data)
+	i := sqlite.ColumnIndexStart
+	data := make([]byte, stmt.ColumnLen(i))
+	stmt.ColumnBytes(i, data)
 
 	if err := fb.UnmarshalBinary(data); err != nil {
 		return fb, fmt.Errorf("factom.FBlock.UnmarshalBinary(): %w", err)
@@ -97,12 +144,34 @@ func selectFBlock(stmt *sqlite.Stmt) (factom.FBlock, error) {
 }
 
 func SelectSyncHeight(conn *sqlite.Conn) (uint32, error) {
-	var height uint32
-	err := sqlitex.Exec(conn, `SELECT "height" FROM "fblock"
-                ORDER BY "height" DESC LIMIT 1;`,
-		func(stmt *sqlite.Stmt) error {
-			height = uint32(stmt.ColumnInt64(0))
-			return nil
-		})
-	return height, err
+	stmt := conn.Prep(`SELECT "height" FROM "fblock" ORDER BY "height" DESC LIMIT 1;`)
+	defer stmt.Reset()
+	hasRow, err := stmt.Step()
+	if err != nil || !hasRow {
+		return 0, err
+	}
+	height := uint32(stmt.ColumnInt64(sqlite.ColumnIndexStart))
+	return height, nil
+}
+
+// SelectFBlockKeyMR returns the KeyMR for the FBlock with sequence seq.
+func SelectFBlockKeyMR(conn *sqlite.Conn, height uint32) (factom.Bytes32, error) {
+	var keyMR factom.Bytes32
+	stmt := conn.Prep(`SELECT "key_mr" FROM "fblock" WHERE "height" = ?;`)
+	defer stmt.Reset()
+	stmt.BindInt64(sqlite.BindIndexStart, int64(int32(height)))
+
+	hasRow, err := stmt.Step()
+	if err != nil {
+		return keyMR, err
+	}
+	if !hasRow {
+		return keyMR, fmt.Errorf("no FBlock found")
+	}
+
+	if stmt.ColumnBytes(sqlite.ColumnIndexStart, keyMR[:]) != len(keyMR) {
+		return keyMR, fmt.Errorf("invalid key_mr length")
+	}
+
+	return keyMR, err
 }

@@ -14,10 +14,12 @@ type Config struct {
 	Whitelist       map[factom.FAAddress]struct{}
 	Price           *cryptoprice.Client
 	StartScanHeight uint32
+	Debug           bool
 }
 
 func NewConfig() Config {
-	return Config{C: factom.NewClient(),
+	return Config{
+		C:     factom.NewClient(),
 		Price: cryptoprice.NewClient("FCT", "USD"),
 	}
 }

@@ -17,6 +17,7 @@ func parseFlags(cfg *engine.Config) {
 	flag.StringVar(&cfg.Price.APIKey, "api-key", "", "CryptoCompare API Key")
 	flag.Var((*Whitelist)(&cfg.Whitelist), "whitelist", "Track only these addresses (comma separated list)")
 	start := flag.Int64("start-scan", 0, "Start scanning from this height if creating a new database")
+	flag.BoolVar(&cfg.Debug, "debug", false, "Print additional debug info")
 
 	flag.Parse()
 

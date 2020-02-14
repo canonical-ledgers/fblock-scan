@@ -10,6 +10,7 @@ import (
 	"github.com/AdamSLevy/retry"
 	"github.com/Factom-Asset-Tokens/factom"
 	"github.com/canonical-ledgers/fblock-scan/db"
+	"github.com/cheggaaa/pb/v3"
 )
 
 func (cfg Config) Start(ctx context.Context) (_ <-chan struct{}, err error) {
@@ -61,21 +62,24 @@ func (cfg Config) scan(ctx context.Context, conn *sqlite.Conn) error {
 		return fmt.Errorf("factom.Heights.Get(): %v", err)
 	}
 
+	syncBar := pb.New(int(heights.EntryBlock))
+	syncBar.Add(int(syncHeight - 1))
+	syncBar.Start()
+
 	// scanTicker kicks off a new scan.
 	scanTicker := time.NewTicker(5 * time.Minute)
 
-	fmt.Printf("Scanning from block %v to %v...\n",
-		syncHeight, heights.EntryBlock)
-
+	defer fmt.Println()
 	// Factom Blockchain Scan Loop
 	for {
 		if !synced && syncHeight == heights.EntryBlock {
 			synced = true
+			syncBar.Finish()
 			fmt.Printf("FBlock scan complete to block %v.", syncHeight)
 		}
-
 		// Process all new DBlocks sequentially.
 		for h := syncHeight; h <= heights.EntryBlock; h++ {
+			syncBar.Increment()
 			if err := cfg.syncFBlock(ctx, conn, h); err != nil {
 				return err
 			}
