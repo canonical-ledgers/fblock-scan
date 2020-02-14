@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"crawshaw.io/sqlite"
-	"github.com/canonical-ledgers/fblock-scan/db"
 	"github.com/AdamSLevy/retry"
 	"github.com/Factom-Asset-Tokens/factom"
+	"github.com/canonical-ledgers/fblock-scan/db"
 )
 
 func (cfg Config) Start(ctx context.Context) (_ <-chan struct{}, err error) {
@@ -52,6 +52,8 @@ func (cfg Config) scan(ctx context.Context, conn *sqlite.Conn) error {
 	}
 	if syncHeight > 0 {
 		syncHeight++
+	} else {
+		syncHeight = cfg.StartScanHeight
 	}
 
 	var heights factom.Heights
@@ -61,6 +63,9 @@ func (cfg Config) scan(ctx context.Context, conn *sqlite.Conn) error {
 
 	// scanTicker kicks off a new scan.
 	scanTicker := time.NewTicker(5 * time.Minute)
+
+	fmt.Printf("Scanning from block %v to %v...\n",
+		syncHeight, heights.EntryBlock)
 
 	// Factom Blockchain Scan Loop
 	for {

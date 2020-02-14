@@ -9,10 +9,11 @@ import (
 )
 
 type Config struct {
-	C         *factom.Client
-	DBURI     string
-	Whitelist map[factom.FAAddress]struct{}
-	Price     *cryptoprice.Client
+	C               *factom.Client
+	DBURI           string
+	Whitelist       map[factom.FAAddress]struct{}
+	Price           *cryptoprice.Client
+	StartScanHeight uint32
 }
 
 func NewConfig() Config {
@@ -24,6 +25,15 @@ func NewConfig() Config {
 func (cfg Config) String() string {
 	s := fmt.Sprintln("factomd:", cfg.C.FactomdServer)
 	s += fmt.Sprintln("DB URI:", cfg.DBURI)
+	if cfg.Whitelist == nil {
+		s += fmt.Sprintln("Tracking All Addresses")
+	} else {
+		s += fmt.Sprintln("Tracking:")
+		for adr := range cfg.Whitelist {
+			s += fmt.Sprintln(adr)
+		}
+	}
+
 	return s
 }
 
