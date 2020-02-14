@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"crawshaw.io/sqlite"
-	"github.com/AdamSLevy/fct-trackerd/db"
+	"github.com/canonical-ledgers/fblock-scan/db"
 	"github.com/AdamSLevy/retry"
 	"github.com/Factom-Asset-Tokens/factom"
 )

@@ -1,4 +1,4 @@
-module github.com/AdamSLevy/fct-trackerd
+module github.com/canonical-ledgers/fblock-scan
 
 go 1.13
 

@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/AdamSLevy/fct-trackerd/engine"
+	"github.com/canonical-ledgers/fblock-scan/engine"
 )
 
 func main() {
@@ -16,7 +16,7 @@ func _main() int {
 	cfg := engine.NewConfig()
 	parseFlags(&cfg)
 
-	fmt.Println("Factoid Transaction Tracker Daemon")
+	fmt.Println("fblock-scan: Factoid Block Transaction Scanner")
 	fmt.Println(cfg)
 	fmt.Println("Starting...")
 
