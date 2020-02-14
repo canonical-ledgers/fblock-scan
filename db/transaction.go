@@ -28,7 +28,7 @@ const CreateTableTransaction = `CREATE TABLE "transaction" (
 
         FOREIGN KEY("height") REFERENCES "fblock"("height")
 );
-CREATE INDEX "idx_transaction_id" ON "transaction"("id");
+CREATE INDEX "idx_transaction_id" ON "transaction"("hash");
 `
 
 const CreateTableAddressTransaction = `CREATE TABLE "address_transaction" (
@@ -50,7 +50,7 @@ func InsertTransaction(conn *sqlite.Conn, tx factom.Transaction,
                 "height",
                 "fb_offset",
                 "size",
-                "id",
+                "hash",
                 "timestamp",
                 "total_fct_in",
                 "total_fct_out",

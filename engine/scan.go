@@ -63,7 +63,7 @@ func (cfg Config) scan(ctx context.Context, conn *sqlite.Conn) error {
 	}
 
 	syncBar := pb.New(int(heights.EntryBlock))
-	syncBar.Add(int(syncHeight - 1))
+	syncBar.Add(int(int32(syncHeight - 1)))
 	syncBar.Start()
 
 	// scanTicker kicks off a new scan.
