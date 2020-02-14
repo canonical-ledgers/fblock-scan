@@ -83,6 +83,15 @@ func (cfg Config) scan(ctx context.Context, conn *sqlite.Conn) error {
 			if err := cfg.syncFBlock(ctx, conn, h); err != nil {
 				return err
 			}
+			select {
+			case <-scanTicker.C:
+				err := heights.Get(ctx, cfg.C)
+				if err != nil {
+					return fmt.Errorf("factom.Heights.Get(): %v", err)
+				}
+				syncBar.SetTotal(int64(heights.EntryBlock))
+			default:
+			}
 		}
 
 		if synced {
