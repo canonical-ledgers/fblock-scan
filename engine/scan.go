@@ -119,7 +119,8 @@ func (cfg Config) syncFBlock(ctx context.Context, conn *sqlite.Conn,
 			// Get price at Timestamp
 			price, err = cfg.Price.GetPriceAt(dblk.Timestamp)
 			if err != nil {
-				return fmt.Errorf("cryptoprice.Client.GetPriceAt(): %w", err)
+				return fmt.Errorf("cryptoprice.Client.GetPriceAt(): %w",
+					err)
 			}
 			return nil
 		})
