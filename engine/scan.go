@@ -45,7 +45,7 @@ func (cfg Config) Start(ctx context.Context) (_ <-chan struct{}, err error) {
 
 	cfg.syncBar = pb.New(0)
 
-	fblocks := make(chan fbPrice, 8)
+	fblocks := make(chan fbPrice, 20)
 	g.Go(func() error { return cfg.fblockInserter(ctx, conn, fblocks) })
 	g.Go(func() error { return cfg.scan(ctx, syncHeight, fblocks) })
 
