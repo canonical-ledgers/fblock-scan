@@ -62,7 +62,8 @@ func (cfg Config) Start(ctx context.Context) (_ <-chan struct{}, err error) {
 	}()
 	return done, nil
 }
-func (cfg Config) scan(ctx context.Context, syncHeight uint32, fblocks chan<- fbPrice) error {
+func (cfg Config) scan(ctx context.Context, syncHeight uint32,
+	fblocks chan<- fbPrice) error {
 
 	// synced tracks whether we have completed our first sync.
 	var synced bool
@@ -96,7 +97,8 @@ func (cfg Config) scan(ctx context.Context, syncHeight uint32, fblocks chan<- fb
 			case <-scanTicker.C:
 				err := heights.Get(ctx, cfg.C)
 				if err != nil {
-					return fmt.Errorf("factom.Heights.Get(): %v", err)
+					return fmt.Errorf(
+						"factom.Heights.Get(): %v", err)
 				}
 				cfg.syncBar.SetTotal(int64(heights.EntryBlock))
 			default:
@@ -120,7 +122,8 @@ func (cfg Config) scan(ctx context.Context, syncHeight uint32, fblocks chan<- fb
 		}
 	}
 }
-func (cfg Config) syncFBlock(ctx context.Context, height uint32, fblocks chan<- fbPrice) error {
+func (cfg Config) syncFBlock(ctx context.Context, height uint32,
+	fblocks chan<- fbPrice) error {
 
 	dblk := factom.DBlock{Height: height}
 	if err := dblk.Get(ctx, cfg.C); err != nil {
@@ -145,8 +148,8 @@ func (cfg Config) syncFBlock(ctx context.Context, height uint32, fblocks chan<- 
 			// Get price at Timestamp
 			price, err = cfg.Price.GetPriceAt(dblk.Timestamp)
 			if err != nil {
-				return fmt.Errorf("cryptoprice.Client.GetPriceAt(): %w",
-					err)
+				return fmt.Errorf(
+					"cryptoprice.Client.GetPriceAt(): %w", err)
 			}
 			return nil
 		})
@@ -170,13 +173,15 @@ func (cfg Config) fblockInserter(ctx context.Context, conn *sqlite.Conn,
 	fblocks <-chan fbPrice) error {
 	conn.SetInterrupt(nil)
 	for {
+		// Batch FBlocks in transactions of 100 for improved
+		// performance.
 		var commit error
 		release := sqlitex.Save(conn)
 		for i := 0; i < 100; i++ {
 			select {
 			case fbp := <-fblocks:
-				if err := db.InsertFBlock(conn,
-					fbp.FBlock, fbp.Price, cfg.Whitelist); err != nil {
+				if err := db.InsertFBlock(conn, fbp.FBlock, fbp.Price,
+					cfg.Whitelist); err != nil {
 					release(&commit)
 					return fmt.Errorf("db.InsertFBlock(): %w", err)
 				}
@@ -188,8 +193,9 @@ func (cfg Config) fblockInserter(ctx context.Context, conn *sqlite.Conn,
 
 			if cfg.syncBar.Current() == cfg.syncBar.Total() {
 				// Generate indexes after sync.
-				err := sqlitex.ExecScript(conn, db.CreateIndexFBlockKeyMR+
-					db.CreateIndexTransactionHash)
+				err := sqlitex.ExecScript(conn,
+					db.CreateIndexFBlockKeyMR+
+						db.CreateIndexTransactionHash)
 				if err != nil {
 					release(&commit)
 					return err
