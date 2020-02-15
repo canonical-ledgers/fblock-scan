@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/Factom-Asset-Tokens/factom"
 	"github.com/canonical-ledgers/fblock-scan/db"
 	"github.com/cheggaaa/pb/v3"
+	"golang.org/x/sync/errgroup"
 )
 
 func (cfg Config) Start(ctx context.Context) (_ <-chan struct{}, err error) {
@@ -23,6 +25,7 @@ func (cfg Config) Start(ctx context.Context) (_ <-chan struct{}, err error) {
 	if err != nil {
 		return nil, err
 	}
+	g, ctx := errgroup.WithContext(ctx)
 	conn.SetInterrupt(ctx.Done())
 
 	err = db.Setup(conn)
@@ -30,26 +33,9 @@ func (cfg Config) Start(ctx context.Context) (_ <-chan struct{}, err error) {
 		return nil, err
 	}
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		defer conn.Close()
-		if err := cfg.scan(ctx, conn); err != nil {
-			if ctx.Err() == nil {
-				log.Println("Error: ", err)
-			}
-		}
-	}()
-	return done, nil
-}
-func (cfg Config) scan(ctx context.Context, conn *sqlite.Conn) error {
-
-	// synced tracks whether we have completed our first sync.
-	var synced bool
-
 	syncHeight, err := db.SelectSyncHeight(conn)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if syncHeight > 0 {
 		syncHeight++
@@ -57,14 +43,37 @@ func (cfg Config) scan(ctx context.Context, conn *sqlite.Conn) error {
 		syncHeight = cfg.StartScanHeight
 	}
 
+	cfg.syncBar = pb.New(0)
+
+	fblocks := make(chan fbPrice, 8)
+	g.Go(func() error { return cfg.fblockInserter(ctx, conn, fblocks) })
+	g.Go(func() error { return cfg.scan(ctx, syncHeight, fblocks) })
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer conn.Close()
+		if err := g.Wait(); err != nil {
+			if !errors.Is(err, context.Canceled) {
+				log.Println("Error: ", err)
+			}
+		}
+	}()
+	return done, nil
+}
+func (cfg Config) scan(ctx context.Context, syncHeight uint32, fblocks chan<- fbPrice) error {
+
+	// synced tracks whether we have completed our first sync.
+	var synced bool
+
 	var heights factom.Heights
 	if err := heights.Get(ctx, cfg.C); err != nil {
 		return fmt.Errorf("factom.Heights.Get(): %v", err)
 	}
 
-	syncBar := pb.New(int(heights.EntryBlock))
-	syncBar.Add(int(int32(syncHeight - 1)))
-	syncBar.Start()
+	cfg.syncBar.SetTotal(int64(heights.EntryBlock))
+	cfg.syncBar.Add(int(int32(syncHeight - 1)))
+	cfg.syncBar.Start()
 
 	// scanTicker kicks off a new scan.
 	scanTicker := time.NewTicker(5 * time.Minute)
@@ -74,13 +83,12 @@ func (cfg Config) scan(ctx context.Context, conn *sqlite.Conn) error {
 	for {
 		if !synced && syncHeight == heights.EntryBlock {
 			synced = true
-			syncBar.Finish()
+			cfg.syncBar.Finish()
 			fmt.Printf("FBlock scan complete to block %v.", syncHeight)
 		}
 		// Process all new DBlocks sequentially.
 		for h := syncHeight; h <= heights.EntryBlock; h++ {
-			syncBar.Increment()
-			if err := cfg.syncFBlock(ctx, conn, h); err != nil {
+			if err := cfg.syncFBlock(ctx, h, fblocks); err != nil {
 				return err
 			}
 			select {
@@ -89,7 +97,7 @@ func (cfg Config) scan(ctx context.Context, conn *sqlite.Conn) error {
 				if err != nil {
 					return fmt.Errorf("factom.Heights.Get(): %v", err)
 				}
-				syncBar.SetTotal(int64(heights.EntryBlock))
+				cfg.syncBar.SetTotal(int64(heights.EntryBlock))
 			default:
 			}
 		}
@@ -111,8 +119,7 @@ func (cfg Config) scan(ctx context.Context, conn *sqlite.Conn) error {
 		}
 	}
 }
-func (cfg Config) syncFBlock(ctx context.Context, conn *sqlite.Conn,
-	height uint32) error {
+func (cfg Config) syncFBlock(ctx context.Context, height uint32, fblocks chan<- fbPrice) error {
 
 	dblk := factom.DBlock{Height: height}
 	if err := dblk.Get(ctx, cfg.C); err != nil {
@@ -148,9 +155,28 @@ func (cfg Config) syncFBlock(ctx context.Context, conn *sqlite.Conn,
 		return err
 	}
 
-	if err := db.InsertFBlock(conn, fb, price, cfg.Whitelist); err != nil {
-		return fmt.Errorf("db.InsertFBlock(): %w", err)
-	}
+	fblocks <- fbPrice{fb, price}
 
 	return nil
+}
+
+type fbPrice struct {
+	factom.FBlock
+	Price float64
+}
+
+func (cfg Config) fblockInserter(ctx context.Context, conn *sqlite.Conn,
+	fblocks <-chan fbPrice) error {
+	for {
+		select {
+		case fbp := <-fblocks:
+			if err := db.InsertFBlock(conn,
+				fbp.FBlock, fbp.Price, cfg.Whitelist); err != nil {
+				return fmt.Errorf("db.InsertFBlock(): %w", err)
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		cfg.syncBar.Increment()
+	}
 }

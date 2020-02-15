@@ -6,6 +6,7 @@ import (
 
 	"github.com/Factom-Asset-Tokens/factom"
 	"github.com/canonical-ledgers/cryptoprice/v2"
+	"github.com/cheggaaa/pb/v3"
 )
 
 type Config struct {
@@ -15,6 +16,8 @@ type Config struct {
 	Price           *cryptoprice.Client
 	StartScanHeight uint32
 	Debug           bool
+
+	syncBar *pb.ProgressBar
 }
 
 func NewConfig() Config {
