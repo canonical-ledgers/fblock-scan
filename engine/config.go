@@ -16,6 +16,7 @@ type Config struct {
 	Price           *cryptoprice.Client
 	StartScanHeight uint32
 	Debug           bool
+	Speed           bool
 
 	syncBar *pb.ProgressBar
 }

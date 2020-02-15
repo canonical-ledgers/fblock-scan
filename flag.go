@@ -18,6 +18,7 @@ func parseFlags(cfg *engine.Config) {
 	flag.Var((*Whitelist)(&cfg.Whitelist), "whitelist", "Track only these addresses (comma separated list)")
 	start := flag.Int64("start-scan", 0, "Start scanning from this height if creating a new database")
 	flag.BoolVar(&cfg.Debug, "debug", false, "Print additional debug info")
+	flag.BoolVar(&cfg.Speed, "speed", false, "Improve insert speed at the risk of database corruption on crashes")
 
 	flag.Parse()
 

@@ -8,19 +8,20 @@ import (
 
 // CreateTableAddress is a SQL string that creates the "address" table.
 const CreateTableAddress = `CREATE TABLE "address" (
+        "id"      INTEGER PRIMARY KEY,
         "balance" INTEGER NOT NULL,
-        "address" TEXT PRIMARY KEY NOT NULL,
+        "adr"     TEXT NOT NULL UNIQUE,
         "memo"    TEXT
 );
 `
 
 // Add adds add to the balance of adr, creating a new row in "address" if it
-// does not exist. If successful, the rowid of adr is returned.
+// does not exist. If successful, the id of adr is returned.
 func AddressAdd(conn *sqlite.Conn, adr *factom.FAAddress, add int64) (int64, error) {
 	stmt := conn.Prep(`INSERT INTO "address" (
-                "address",
+                "adr",
                 "balance"
-        ) VALUES (?, ?) ON CONFLICT("address") DO
+        ) VALUES (?, ?) ON CONFLICT("adr") DO
                 UPDATE SET "balance" = "balance" + "excluded"."balance";`)
 	defer stmt.Reset()
 	i := sqlite.BindIncrementor()
@@ -48,6 +49,10 @@ func InsertAddresses(conn *sqlite.Conn, tx factom.Transaction,
 	}()
 	defer sqlitex.Save(conn)(&err)
 
+	var save bool
+	if whitelist == nil { // Save all Addresses
+		save = true
+	}
 	stmt := conn.Prep(`INSERT INTO "address_transaction"
                 ("tx_id", "adr_id", "amount") VALUES
                 (?, ?, ?)
@@ -55,11 +60,6 @@ func InsertAddresses(conn *sqlite.Conn, tx factom.Transaction,
                 UPDATE SET "amount" = "amount" + "excluded"."amount";`)
 	defer stmt.Reset()
 	stmt.BindInt64(sqlite.BindIndexStart, txID)
-
-	var save bool
-	if whitelist == nil { // Save all Addresses
-		save = true
-	}
 
 	sign := int64(-1) // Subtract all inputs.
 	for _, adrs := range [][]factom.AddressAmount{tx.FCTInputs, tx.FCTOutputs} {
@@ -96,12 +96,12 @@ func InsertAddresses(conn *sqlite.Conn, tx factom.Transaction,
 
 const sqlitexNoResultsErr = "sqlite: statement has no results"
 
-// SelectIDBalance returns the rowid and balance for the given adr.
+// SelectIDBalance returns the id and balance for the given adr.
 func SelectAddressIDBalance(conn *sqlite.Conn,
 	adr *factom.FAAddress) (adrID int64, bal uint64, err error) {
 	adrID = -1
-	stmt := conn.Prep(`SELECT "rowid", "balance" FROM "address"
-                WHERE "address" = ?;`)
+	stmt := conn.Prep(`SELECT "id", "balance" FROM "address"
+                WHERE "adr" = ?;`)
 	defer stmt.Reset()
 
 	stmt.BindText(sqlite.BindIndexStart, adr.String())
@@ -120,9 +120,9 @@ func SelectAddressIDBalance(conn *sqlite.Conn,
 	return
 }
 
-// SelectAddressID returns the rowid for the given adr.
+// SelectAddressID returns the id for the given adr.
 func SelectAddressID(conn *sqlite.Conn, adr *factom.FAAddress) (int64, error) {
-	stmt := conn.Prep(`SELECT "rowid" FROM "address" WHERE "address" = ?;`)
+	stmt := conn.Prep(`SELECT "id" FROM "address" WHERE "adr" = ?;`)
 	defer stmt.Reset()
 	stmt.BindText(sqlite.BindIndexStart, adr.String())
 	return sqlitex.ResultInt64(stmt)

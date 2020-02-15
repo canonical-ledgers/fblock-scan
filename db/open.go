@@ -7,8 +7,12 @@ import (
 	"crawshaw.io/sqlite/sqlitex"
 )
 
-func Setup(conn *sqlite.Conn) error {
+func Setup(conn *sqlite.Conn, speed bool) error {
 	if err := checkOrSetApplicationID(conn); err != nil {
+		return err
+	}
+
+	if err := enableForeignKeyChecks(conn); err != nil {
 		return err
 	}
 
@@ -16,10 +20,10 @@ func Setup(conn *sqlite.Conn) error {
 		return err
 	}
 
-	if err := enableForeignKeyChecks(conn); err != nil {
-		return err
+	if !speed {
+		return nil
 	}
-	return nil
+	return optimizeSpeed(conn)
 }
 
 const ApplicationID int32 = 0x0FAC701D
@@ -46,5 +50,29 @@ func checkOrSetApplicationID(conn *sqlite.Conn) error {
 }
 
 func enableForeignKeyChecks(conn *sqlite.Conn) error {
-	return sqlitex.ExecScript(conn, `PRAGMA foreign_keys = ON;`)
+	stmt, _, err := conn.PrepareTransient(`PRAGMA foreign_keys = ON;`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Finalize()
+	_, err = stmt.Step()
+	return err
+}
+
+func optimizeSpeed(conn *sqlite.Conn) error {
+	for _, sql := range []string{
+		`PRAGMA synchronous = OFF;`,
+		`PRAGMA journal_mode = MEMORY;`,
+		`PRAGMA foreign_keys = OFF;`,
+	} {
+		stmt, _, err := conn.PrepareTransient(sql)
+		if err != nil {
+			return err
+		}
+		defer stmt.Finalize()
+		if _, err := stmt.Step(); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -10,15 +10,17 @@ import (
 )
 
 const CreateTableFBlock = `CREATE TABLE "fblock"(
-        "height" INT PRIMARY KEY,
+        "height" INTEGER PRIMARY KEY,
         "timestamp" INT NOT NULL,
         "tx_count" INT NOT NULL,
         "ec_exchange_rate" INT NOT NULL,
         "price" REAL, -- Denoted in USD
-        "key_mr" BLOB NOT NULL UNIQUE,
+        "key_mr" BLOB NOT NULL,
         "data" BLOB NOT NULL
 );
 `
+const CreateIndexFBlockKeyMR = `CREATE INDEX IF NOT EXIST "idx_fblock_key_mr"
+        ON "fblock"("key_mr");`
 
 func InsertFBlock(conn *sqlite.Conn, fb factom.FBlock, price float64,
 	whitelist map[factom.FAAddress]struct{}) (err error) {

@@ -14,18 +14,19 @@ func TestDB(t *testing.T) {
 	conn, err := sqlite.OpenConn(":memory:", 0)
 	require.NoError(err, "sqlite.OpenConn()")
 
-	require.NoError(Setup(conn), "Setup()")
+	require.NoError(Setup(conn, false), "Setup()")
 
 	var fb factom.FBlock
 	require.NoError(fb.UnmarshalBinary(fblockData),
 		"factom.FBlock.UnmarshalBinary()")
 
+	fb.PrevKeyMR = new(factom.Bytes32)
 	require.NoError(InsertFBlock(conn, fb, 4.51, nil), "InsertFBlock()")
 	require.Error(InsertFBlock(conn, fb, 4.51, nil), "InsertFBlock(), duplicate")
 
 	for _, tx := range fb.Transactions {
 		txID := tx.ID
-		tx, err := SelectTransactionByTxID(conn, txID)
+		tx, err := SelectTransactionByHash(conn, txID)
 		require.NoError(err, "SelectTransactionByTxID()")
 		require.Equal(txID, tx.ID)
 	}

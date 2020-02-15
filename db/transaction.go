@@ -10,6 +10,8 @@ import (
 // CreateTableTransaction is the SQL that creates the "transaction" table which
 // contains metadata about individual transactions within an FBlock.
 const CreateTableTransaction = `CREATE TABLE "transaction" (
+        "id"      INTEGER PRIMARY KEY,
+
         "height" INT NOT NULL,    -- "fblock"."height"
 
         "fb_offset" INT NOT NULL, -- index of tx data within "fblock"."data"
@@ -28,19 +30,20 @@ const CreateTableTransaction = `CREATE TABLE "transaction" (
 
         FOREIGN KEY("height") REFERENCES "fblock"("height")
 );
-CREATE INDEX "idx_transaction_id" ON "transaction"("hash");
 `
+const CreateIndexTransactionHash = `CREATE INDEX IF NOT EXIST "idx_transaction_id"
+        ON "transaction"("hash");`
 
 const CreateTableAddressTransaction = `CREATE TABLE "address_transaction" (
-        "tx_id" INT NOT NULL,  -- "transaction"."rowid"
-        "adr_id" INT NOT NULL, -- "address"."rowid"
+        "tx_id" INT NOT NULL,  -- "transaction"."id"
+        "adr_id" INT NOT NULL, -- "address"."id"
 
         "amount" INT NOT NULL, -- may be negative, if input
 
         PRIMARY KEY("tx_id", "adr_id"),
 
-        FOREIGN KEY("tx_id") REFERENCES "transaction"("rowid"),
-        FOREIGN KEY("adr_id") REFERENCES "address"("rowid")
+        FOREIGN KEY("tx_id") REFERENCES "transaction"("id"),
+        FOREIGN KEY("adr_id") REFERENCES "address"("id")
 );`
 
 func InsertTransaction(conn *sqlite.Conn, tx factom.Transaction,
@@ -78,22 +81,21 @@ func InsertTransaction(conn *sqlite.Conn, tx factom.Transaction,
 
 var ignoreErr = fmt.Errorf("ignore")
 
-var selectTransactionWhere = `SELECT "fblock"."rowid", "fb_offset", "size"
-        FROM "transaction" JOIN "fblock" ON
-                "transaction"."height" = "fblock"."height" WHERE `
+var selectTransactionWhere = `SELECT "height", "fb_offset", "size"
+        FROM "transaction" WHERE `
 
-func SelectTransactionByTxID(conn *sqlite.Conn,
+func SelectTransactionByHash(conn *sqlite.Conn,
 	txID *factom.Bytes32) (factom.Transaction, error) {
 
-	stmt := conn.Prep(selectTransactionWhere + `"id" = ?;`)
+	stmt := conn.Prep(selectTransactionWhere + `"hash" = ?;`)
 	defer stmt.Reset()
 	stmt.BindBytes(sqlite.BindIndexStart, txID[:])
 	return selectTransaction(conn, stmt)
 }
-func SelectTransactionByRowID(conn *sqlite.Conn,
+func SelectTransactionByID(conn *sqlite.Conn,
 	rowID int64) (factom.Transaction, error) {
 
-	stmt := conn.Prep(selectFBlockWhere + `"rowid" = ?;`)
+	stmt := conn.Prep(selectTransactionWhere + `"id" = ?;`)
 	defer stmt.Reset()
 	stmt.BindInt64(sqlite.BindIndexStart, rowID)
 	return selectTransaction(conn, stmt)

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"crawshaw.io/sqlite"
+	"crawshaw.io/sqlite/sqlitex"
 	"github.com/AdamSLevy/retry"
 	"github.com/Factom-Asset-Tokens/factom"
 	"github.com/canonical-ledgers/fblock-scan/db"
@@ -28,7 +29,7 @@ func (cfg Config) Start(ctx context.Context) (_ <-chan struct{}, err error) {
 	g, ctx := errgroup.WithContext(ctx)
 	conn.SetInterrupt(ctx.Done())
 
-	err = db.Setup(conn)
+	err = db.Setup(conn, cfg.Speed)
 	if err != nil {
 		return nil, err
 	}
@@ -167,16 +168,34 @@ type fbPrice struct {
 
 func (cfg Config) fblockInserter(ctx context.Context, conn *sqlite.Conn,
 	fblocks <-chan fbPrice) error {
+	conn.SetInterrupt(nil)
 	for {
-		select {
-		case fbp := <-fblocks:
-			if err := db.InsertFBlock(conn,
-				fbp.FBlock, fbp.Price, cfg.Whitelist); err != nil {
-				return fmt.Errorf("db.InsertFBlock(): %w", err)
+		var commit error
+		release := sqlitex.Save(conn)
+		for i := 0; i < 100; i++ {
+			select {
+			case fbp := <-fblocks:
+				if err := db.InsertFBlock(conn,
+					fbp.FBlock, fbp.Price, cfg.Whitelist); err != nil {
+					release(&commit)
+					return fmt.Errorf("db.InsertFBlock(): %w", err)
+				}
+			case <-ctx.Done():
+				release(&commit)
+				return ctx.Err()
 			}
-		case <-ctx.Done():
-			return ctx.Err()
+			cfg.syncBar.Increment()
+
+			if cfg.syncBar.Current() == cfg.syncBar.Total() {
+				// Generate indexes after sync.
+				err := sqlitex.ExecScript(conn, db.CreateIndexFBlockKeyMR+
+					db.CreateIndexTransactionHash)
+				if err != nil {
+					release(&commit)
+					return err
+				}
+			}
 		}
-		cfg.syncBar.Increment()
+		release(&commit)
 	}
 }
