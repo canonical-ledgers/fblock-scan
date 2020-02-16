@@ -3,7 +3,7 @@ module github.com/canonical-ledgers/fblock-scan
 go 1.13
 
 require (
-	crawshaw.io/sqlite v0.2.5-0.20200214214754-8ee3256bdfc0
+	crawshaw.io/sqlite v0.2.5
 	github.com/AdamSLevy/retry v0.0.0-20191017184328-cce921f261f4
 	github.com/Factom-Asset-Tokens/base58 v0.0.0-20191118025050-4fa02e92ec20 // indirect
 	github.com/Factom-Asset-Tokens/factom v0.0.0-20200212221606-6d5a0a1efb17

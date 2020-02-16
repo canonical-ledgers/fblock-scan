@@ -1,7 +1,7 @@
 crawshaw.io/iox v0.0.0-20181124134642-c51c3df30797 h1:yDf7ARQc637HoxDho7xjqdvO5ZA2Yb+xzv/fOnnvZzw=
 crawshaw.io/iox v0.0.0-20181124134642-c51c3df30797/go.mod h1:sXBiorCo8c46JlQV3oXPKINnZ8mcqnye1EkVkqsectk=
-crawshaw.io/sqlite v0.2.5-0.20200214214754-8ee3256bdfc0 h1:1SlPZrK4aYY59CWOxXL6RDPzcW9EJiXx9wwhucM3To0=
-crawshaw.io/sqlite v0.2.5-0.20200214214754-8ee3256bdfc0/go.mod h1:igAO5JulrQ1DbdZdtVq48mnZUBAPOeFzer7VhDWNtW4=
+crawshaw.io/sqlite v0.2.5 h1:lUjWtEQJZApoL4V83cHsNeaGZkY5Ofmh8cGGBdZNxPU=
+crawshaw.io/sqlite v0.2.5/go.mod h1:igAO5JulrQ1DbdZdtVq48mnZUBAPOeFzer7VhDWNtW4=
 github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d h1:FWutTJGVqBnL4rLgeNaspUYnmnvkXcmDA3QO3rHBGgU=
 github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d/go.mod h1:Nw3sh5L40Xs1wno7ndbD/dYWg+vARpBvpX9Zz1YSxbo=
 github.com/AdamSLevy/jsonrpc2/v12 v12.0.1 h1:cVyqoBa4Qgw8bQj3vCBnZHOX/E+uvPM8TbQPobGwY8Q=
