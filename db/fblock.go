@@ -19,7 +19,7 @@ const CreateTableFBlock = `CREATE TABLE "fblock"(
         "data" BLOB NOT NULL
 );
 `
-const CreateIndexFBlockKeyMR = `CREATE INDEX IF NOT EXIST "idx_fblock_key_mr"
+const CreateIndexFBlockKeyMR = `CREATE INDEX IF NOT EXISTS "idx_fblock_key_mr"
         ON "fblock"("key_mr");`
 
 func InsertFBlock(conn *sqlite.Conn, fb factom.FBlock, price float64,

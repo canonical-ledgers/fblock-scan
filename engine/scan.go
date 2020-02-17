@@ -89,8 +89,8 @@ func (cfg Config) scan(ctx context.Context, syncHeight uint32,
 			fmt.Printf("FBlock scan complete to block %v.", syncHeight)
 		}
 		// Process all new DBlocks sequentially.
-		for h := syncHeight; h <= heights.EntryBlock; h++ {
-			if err := cfg.syncFBlock(ctx, h, fblocks); err != nil {
+		for ; syncHeight <= heights.EntryBlock; syncHeight++ {
+			if err := cfg.syncFBlock(ctx, syncHeight, fblocks); err != nil {
 				return err
 			}
 			select {

@@ -31,7 +31,7 @@ const CreateTableTransaction = `CREATE TABLE "transaction" (
         FOREIGN KEY("height") REFERENCES "fblock"("height")
 );
 `
-const CreateIndexTransactionHash = `CREATE INDEX IF NOT EXIST "idx_transaction_id"
+const CreateIndexTransactionHash = `CREATE INDEX IF NOT EXISTS "idx_transaction_id"
         ON "transaction"("hash");`
 
 const CreateTableAddressTransaction = `CREATE TABLE "address_transaction" (
